@@ -1,5 +1,6 @@
 package com.junior.notifrn;
 
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -7,21 +8,20 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import java.io.IOException;
+import org.json.JSONObject;
 
 public class NotIFRN extends AppCompatActivity {
 
     EditText editEmail, editSenha;
     Button btnLogar;
 
-    String url = "";
-    String parametro = "";
-
+    String email = "", senha  = "";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -40,18 +40,19 @@ public class NotIFRN extends AppCompatActivity {
                 NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
                 if (networkInfo != null && networkInfo.isConnected()) {
 
-                    String email = editEmail.getText().toString();
-                    String senha = editSenha.getText().toString();
+                    email = editEmail.getText().toString();
+                    senha = editSenha.getText().toString();
 
                     if (email.isEmpty() || senha.isEmpty()) {
+                        if (!(editEmail.getText().toString().trim().length() > 0)){
+                            editEmail.setError("Matricula");
+                        }
+                        if (!(editSenha.getText().toString().trim().length() > 0)){
+                            editSenha.setError("Senha");
+                        }
                         Toast.makeText(getApplicationContext(), "Nenhum campo pode estar vazio", Toast.LENGTH_LONG).show();
                     } else {
-
-                        url = "https://portal.ifrn.edu.br";
-
-                        parametro = "email=" + email + "&senha" + senha;
-
-                        new SolicitaDados().execute(url);
+                        new Autenticacao().execute();
                     }
                 } else {
                     Toast.makeText(getApplicationContext(), "Nenhuma conexão foi detectada", Toast.LENGTH_LONG).show();
@@ -61,28 +62,60 @@ public class NotIFRN extends AppCompatActivity {
         });
     }
 
-    private class SolicitaDados extends AsyncTask<String, Void, String> {
+    private class Autenticacao extends AsyncTask<Object, Object, String>{
 
+        ProgressDialog progressDialog;
         @Override
-        protected String doInBackground(String... urls) {
-
-            //params comes from the execute() call: params[0] i the url.
-            //try {
-            return Conexao.postDados(urls[0], parametro);
-            //} catch (IOException e){
-            //    return "Unable to retrieve web page, URL may be invalid.";
-            // }
+        protected void onPreExecute(){
+            progressDialog = new ProgressDialog(NotIFRN.this);
+            progressDialog.setCancelable(false);
+            progressDialog.show();
         }
 
-        //onPostExecute displays the results of the AsyncTask.
         @Override
-        protected void onPostExecute(String resultado) {
+        protected String doInBackground(Object... params) {
+            try {
 
-            if (resultado.equals("login_ok")) {
+                JSONObject userValues = new JSONObject();
+                userValues.put("username", email);
+                userValues.put("password", senha);
+                String jsonStr = userValues.toString();
+                Log.i("::CODEJSON", "OK");
+
+                HttpRequest json = HttpRequest
+                        .post("https://suap.ifrn.edu.br/api/v2/autenticacao/token/")
+                        .header("Content-Type", "application/json")
+                        .send(jsonStr);
+
+                String jsonObject = json.body();
+
+                JSONObject token = new JSONObject(jsonObject);
+                Log.i("::CODEJSON", "erro: "+json.code());
+                Log.i("::CODEJSON", "erro: "+json.message());
+
+                String accessToken = token.getString("token");
+
+                Log.i("::CODEJSON", accessToken);
+
+                return accessToken;
+
+            }catch (Exception e){
+                return null;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String token) {
+
+            progressDialog.cancel();
+
+            if (token != null){
+//                Toast.makeText(NotIFRN.this, token, Toast.LENGTH_SHORT).show();
                 Intent abreCaledario1 = new Intent(NotIFRN.this, Calendario.class);
                 startActivity(abreCaledario1);
-            } else {
-                Toast.makeText(getApplicationContext(), "Usuário ou senha estão incorretos", Toast.LENGTH_LONG).show();
+
+            }else {
+                Toast.makeText(NotIFRN.this, "Erro", Toast.LENGTH_SHORT).show();
             }
         }
     }
